@@ -1,0 +1,31 @@
+# Source files (TypeScript) - included in dist
+# src/
+
+# Tests
+__tests__/
+__mocks__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+coverage/
+jest.config.js
+
+# Config files
+.eslintrc*
+.prettierrc*
+tsconfig.json
+rollup.config.mjs
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+
+# Misc
+*.log
+.DS_Store
+

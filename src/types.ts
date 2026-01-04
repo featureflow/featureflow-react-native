@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 // Re-export types that are available from featureflow-client
 export type {
   FeatureflowUser,
-  Config,
+  Config as BaseConfig,
   EvaluatedFeatures,
   Evaluate,
   Features,
@@ -14,11 +14,31 @@ export type {
 // Import types we need to reference
 import type {
   FeatureflowUser,
-  Config,
+  Config as BaseConfig,
   EvaluatedFeatures,
   Evaluate,
   Features,
 } from 'featureflow-client';
+
+/**
+ * React Native specific configuration options.
+ * Extends the base Config from featureflow-client with additional options.
+ */
+export type Config = BaseConfig & {
+  /**
+   * Cache time-to-live in milliseconds.
+   * If cached features are fresher than this, skip the API call on initialization.
+   * Set to 0 to always fetch fresh features.
+   * @default 10000 (10 seconds)
+   */
+  cacheTTL?: number;
+
+  /**
+   * Timeout in milliseconds for API requests.
+   * @default 10000 (10 seconds)
+   */
+  timeout?: number;
+};
 
 // ============================================
 // Types not exported from featureflow-client
@@ -74,6 +94,12 @@ export type ConfigInternal = {
   offline: boolean;
   uniqueEvals: boolean;
   timeout: number;
+  /**
+   * Cache time-to-live in milliseconds.
+   * If cached features are fresher than this, skip the API call.
+   * @default 10000 (10 seconds)
+   */
+  cacheTTL: number;
 };
 
 /**

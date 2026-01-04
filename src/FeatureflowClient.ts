@@ -28,6 +28,9 @@ const mitt =
 const DEFAULT_BASE_URL = 'https://app.featureflow.io';
 const DEFAULT_EVENTS_URL = 'https://events.featureflow.io';
 
+/** Default cache TTL in milliseconds (10 seconds) */
+const DEFAULT_CACHE_TTL = 10 * 1000;
+
 const DEFAULT_CONFIG: ConfigInternal = {
   baseUrl: DEFAULT_BASE_URL,
   eventsUrl: DEFAULT_EVENTS_URL,
@@ -35,11 +38,20 @@ const DEFAULT_CONFIG: ConfigInternal = {
   initOnCache: false,
   offline: false,
   uniqueEvals: true,
-  timeout: 10000
+  timeout: 10000,
+  cacheTTL: DEFAULT_CACHE_TTL
 };
 
-const STORAGE_PREFIX = 'ff:rn:v1';
+const STORAGE_PREFIX = 'ff:rn:v2'; // Bumped version for new cache format
 const ANONYMOUS_ID_KEY = 'ff-anonymous-id';
+
+/**
+ * Cache entry with timestamp for freshness checking.
+ */
+type CacheEntry = {
+  features: { [key: string]: Feature };
+  timestamp: number;
+};
 
 /**
  * Generate a random anonymous ID.
@@ -126,15 +138,25 @@ export class FeatureflowClientImpl implements IFeatureflowClient {
     };
 
     // Try to load from cache
-    const cachedFeatures = await this.loadFeaturesFromCache(userId);
-    if (cachedFeatures) {
-      this.features = cachedFeatures;
+    const cacheResult = await this.loadFeaturesFromCache(userId);
+    if (cacheResult) {
+      this.features = cacheResult.features;
       this.emitter.emit(events.LOADED_FROM_CACHE, this.getFeatures());
 
+      // If cache is fresh (< cacheTTL), skip the API call entirely
+      if (cacheResult.isFresh) {
+        this._isInitialized = true;
+        this._receivedInitialResponse = true;
+        this.emitter.emit(events.INIT, this.getFeatures());
+        this.emitter.emit(events.LOADED, this.getFeatures());
+        return this.features;
+      }
+
+      // If initOnCache is true, emit INIT but still fetch in background
       if (this.config.initOnCache) {
         this._isInitialized = true;
         this.emitter.emit(events.INIT, this.getFeatures());
-        return this.features;
+        // Continue to fetch fresh data below
       }
     }
 
@@ -182,16 +204,29 @@ export class FeatureflowClientImpl implements IFeatureflowClient {
 
   /**
    * Load features from local storage.
+   * Returns the features and whether they are fresh (within cacheTTL).
    */
   private async loadFeaturesFromCache(
     userId: string
-  ): Promise<{ [key: string]: Feature } | null> {
+  ): Promise<{ features: { [key: string]: Feature }; isFresh: boolean } | null> {
     try {
       const cached = await this.storage.getItem(
         `${STORAGE_PREFIX}:${userId}:${this.apiKey}`
       );
       if (cached) {
-        return JSON.parse(cached);
+        const cacheEntry: CacheEntry = JSON.parse(cached);
+        
+        // Check if cache entry has the new format with timestamp
+        if (cacheEntry.features && typeof cacheEntry.timestamp === 'number') {
+          const age = Date.now() - cacheEntry.timestamp;
+          const isFresh = age < this.config.cacheTTL;
+          return { features: cacheEntry.features, isFresh };
+        }
+        
+        // Legacy format (just features object) - treat as stale
+        if (typeof cacheEntry === 'object' && !('features' in cacheEntry)) {
+          return { features: cacheEntry as unknown as { [key: string]: Feature }, isFresh: false };
+        }
       }
     } catch (error) {
       console.warn('[Featureflow] Failed to load features from cache:', error);
@@ -200,16 +235,20 @@ export class FeatureflowClientImpl implements IFeatureflowClient {
   }
 
   /**
-   * Save features to local storage.
+   * Save features to local storage with timestamp.
    */
   private async saveFeaturesToCache(
     userId: string,
     features: { [key: string]: Feature }
   ): Promise<void> {
     try {
+      const cacheEntry: CacheEntry = {
+        features,
+        timestamp: Date.now()
+      };
       await this.storage.setItem(
         `${STORAGE_PREFIX}:${userId}:${this.apiKey}`,
-        JSON.stringify(features)
+        JSON.stringify(cacheEntry)
       );
     } catch (error) {
       console.warn('[Featureflow] Failed to save features to cache:', error);
@@ -278,7 +317,8 @@ export class FeatureflowClientImpl implements IFeatureflowClient {
       const variant = this.evalRules(features[key]);
       evaluated[key] = variant || 'off';
 
-      if (this.config.uniqueEvals && !this.evaluatedFeatures[key]) {
+      // Only post evaluation events if not in offline mode
+      if (!this.config.offline && this.config.uniqueEvals && !this.evaluatedFeatures[key]) {
         this.evaluatedFeatures[key] = variant || 'off';
         this.restClient.postEvaluateEvent(this.user, key, variant || 'off');
       }

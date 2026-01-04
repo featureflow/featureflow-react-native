@@ -23,6 +23,7 @@ export class RestClient {
   private eventsUrl: string;
   private apiKey: string;
   private timeout: number;
+  private offline: boolean;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private queues: {
     events: unknown[];
@@ -33,6 +34,7 @@ export class RestClient {
     this.baseUrl = config.baseUrl;
     this.eventsUrl = config.eventsUrl;
     this.timeout = config.timeout;
+    this.offline = config.offline;
     this.timer = null;
     this.queues = {
       events: []
@@ -52,12 +54,16 @@ export class RestClient {
 
   /**
    * Queue a goal event for sending.
+   * Does nothing if offline mode is enabled.
    */
   postGoalEvent(
     user: FeatureflowUser,
     goalKey: string,
     evaluatedFeaturesMap: EvaluatedFeatures
   ): void {
+    if (this.offline) {
+      return;
+    }
     this.flushable();
     this.queues.events.push({
       type: 'goal',
@@ -71,12 +77,16 @@ export class RestClient {
 
   /**
    * Queue an evaluation event for sending.
+   * Does nothing if offline mode is enabled.
    */
   postEvaluateEvent(
     user: FeatureflowUser,
     featureKey: string,
     variant: string
   ): void {
+    if (this.offline) {
+      return;
+    }
     this.flushable();
     this.queues.events.push({
       type: 'evaluate',
@@ -193,8 +203,8 @@ export class RestClient {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    // Flush any remaining events
-    if (this.queues.events.length > 0) {
+    // Flush any remaining events (only if not offline)
+    if (!this.offline && this.queues.events.length > 0) {
       this.flush();
     }
   }

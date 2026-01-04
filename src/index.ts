@@ -38,16 +38,19 @@ export { ReactNativeStorage, MemoryStorage, getDefaultStorage } from './storage'
 // Evaluate helper
 export { createEvaluate } from './evaluate';
 
-// Types - Re-exported from featureflow-client
+// Types - Core types (some extended for React Native)
 export type {
   // Core types from featureflow-client
   FeatureflowUser,
-  Config,
   UserAttributes,
   EvaluatedFeatures,
   Evaluate,
   Features,
   Feature,
+  // React Native extended Config (includes cacheTTL, timeout)
+  Config,
+  // Base config from featureflow-client (if needed)
+  BaseConfig,
 } from './types';
 
 // Types defined in React Native SDK

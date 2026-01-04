@@ -314,7 +314,7 @@ function MainContent() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Edit features at app.featureflow.io
+            Edit features at app.featureflow.com
           </Text>
         </View>
       </ScrollView>

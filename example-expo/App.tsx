@@ -39,7 +39,7 @@ import type { FeatureflowUser } from '@featureflow/react-native-sdk';
 // CONFIGURATION
 // ============================================
 
-const FEATUREFLOW_API_KEY = 'sdk-js-env-36d12d2b240943e6b771f15d07ad97dc';
+const FEATUREFLOW_API_KEY = 'sdk-js-env-your-key-here';
 const INITIAL_USER: FeatureflowUser = {
   id: 'demo-user-123',
   attributes: { tier: 'gold', country: 'australia' },
@@ -312,7 +312,7 @@ export default function App() {
       apiKey={FEATUREFLOW_API_KEY}
       user={INITIAL_USER}
       config={{
-        offline: false,
+        offline: true,
         defaultFeatures: {
           'hello-world': 'on',
           'color-theme': 'blue',

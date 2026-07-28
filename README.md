@@ -44,7 +44,7 @@ import React from 'react';
 import { FeatureflowProvider } from '@featureflow/react-native-sdk';
 import MainApp from './MainApp';
 
-const FF_KEY = 'js-env-YOUR_KEY_HERE';
+const FF_KEY = 'sdk-sdk-js-env-YOUR_KEY_HERE';
 
 function App() {
   const user = {
@@ -106,7 +106,7 @@ The standard provider initializes the client on mount.
 import { FeatureflowProvider } from '@featureflow/react-native-sdk';
 
 <FeatureflowProvider
-  apiKey="js-env-YOUR_KEY"
+  apiKey="sdk-js-env-YOUR_KEY"
   user={{ id: 'user-123', attributes: { plan: 'premium' } }}
   config={{ offline: false }}
   loadingComponent={<LoadingScreen />}  // Optional
@@ -123,7 +123,7 @@ Use a pre-initialized client for more control over initialization timing.
 import { FeatureflowProviderWithClient, init } from '@featureflow/react-native-sdk';
 
 // Initialize before rendering
-const client = await init('js-env-YOUR_KEY', user);
+const client = await init('sdk-js-env-YOUR_KEY', user);
 
 <FeatureflowProviderWithClient client={client}>
   <App />
@@ -151,7 +151,7 @@ function MyComponent() {
 
   // Track a goal (for A/B testing)
   const handlePurchase = () => {
-    featureflow.goal('purchase-completed');
+    featureflow.track('purchase-completed', { value: 49.95, plan: 'pro' });
   };
 
   return (
@@ -261,33 +261,69 @@ await featureflow.updateUser({
 });
 ```
 
-## Configuration Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `baseUrl` | `string` | `'https://app.featureflow.io'` | Featureflow API base URL |
-| `eventsUrl` | `string` | `'https://events.featureflow.io'` | Events API URL |
-| `defaultFeatures` | `object` | `{}` | Default feature values for offline/loading states |
-| `initOnCache` | `boolean` | `false` | Emit INIT event when loading from cache |
-| `offline` | `boolean` | `false` | Run in offline mode (no network requests) |
-| `uniqueEvals` | `boolean` | `true` | Only send unique evaluation events |
-| `timeout` | `number` | `10000` | Request timeout in milliseconds |
+## Configuration
 
 ```tsx
 <FeatureflowProvider
-  apiKey="js-env-YOUR_KEY"
+  apiKey="sdk-js-env-YOUR_KEY"
+  user={user}
   config={{
-    defaultFeatures: {
-      'new-feature': 'off',
-      'experiment': 'control'
-    },
-    timeout: 5000,
-    uniqueEvals: true
+    pollingIntervalMs: 60_000,
+    defaultFeatures: { 'new-feature': 'off', 'kill-switch-payments': 'on' }
   }}
+  loadingComponent={<SplashScreen />}
 >
   <App />
 </FeatureflowProvider>
 ```
+
+| Option | Default | Notes |
+|---|---|---|
+| `pollingIntervalMs` | `60000` | Foreground refresh interval. **This is your flag propagation latency** — and the main driver of request volume, which Featureflow bills on. `0` disables polling. |
+| `backgroundPollingIntervalMs` | `0` | Disabled by default; see below. |
+| `refreshOnForeground` | `true` | Re-fetch when the app returns to the foreground. |
+| `defaultFeatures` | `{}` | Served before the first fetch and when offline. Anything unlisted is `off`. |
+| `useCache` | `true` | Persist the last evaluation to AsyncStorage, so returning users skip the default-value frame. |
+| `cacheTTLMs` | `10000` | How long a cached evaluation is served as fresh before a refresh is forced. |
+| `offline` | `false` | No network at all; serves `defaultFeatures`. For tests and previews. |
+| `disableEvents` | `false` | Stops impressions and goals. |
+| `eventFlushIntervalMs` | `30000` | Milliseconds between event flushes. |
+| `maxEventQueueSize` | `1000` | Bound on queued events during a long offline session. |
+| `requestTimeoutMs` | `10000` | Request timeout. |
+| `storage` | AsyncStorage | Override for tests, or previews without AsyncStorage. |
+| `logger` | none | An SDK should not fill your logs uninvited. |
+
+Set `defaultFeatures` for any flag whose wrong-way default would be harmful. It is the mobile
+equivalent of the failover variants the server SDKs register — and note the polarity: for a kill
+switch protecting a fragile dependency, the safe default is usually the *safe path*, which may
+mean the flag reads `on` by default.
+
+## Things that are different on mobile
+
+**Shipped binaries never update.** Someone will still be running today's build in two years, and
+it will keep evaluating whatever flags it reads. **Never delete a flag a live build still reads**
+— archive it instead and leave the off variant serving something safe. Check your minimum
+supported version before cleaning up a mobile flag.
+
+**Background polling is off by default, honestly.** A backgrounded app is suspended on iOS and
+subject to Doze on Android, so a timer is not a schedule the platform will honour. Flags refresh
+when the app returns to the foreground, which is what `refreshOnForeground` is for. Setting
+`backgroundPollingIntervalMs` only helps in apps that already run in the background.
+
+**Time-based rules use the device clock.** Rules targeting `featureflow.date` or
+`featureflow.hourofday` are resolved on-device — that is what keeps responses CDN-cacheable — so
+a scheduled rollout fires at each user's local time, and a device with a wrong clock gets the
+wrong answer. For a hard cutover at a specific instant, flip the flag server-side.
+
+## Impressions
+
+`evaluate()`, `useFeature()`, `useBooleanFlag()`, `useStringFlag()` and `useJsonValue()` record an
+impression. `useFeatures()`, `getFeatures()` and `peek()` do **not** — a debug screen listing
+every flag is not an exposure, and impressions drive experiment denominators and stale-flag
+detection.
+
+Repeated reads are summarised into a count rather than sent individually, so calling a flag hook
+in a component body is safe.
 
 ## TypeScript Support
 
@@ -328,7 +364,7 @@ import { init, FeatureflowProviderWithClient } from '@featureflow/react-native-s
 
 // Initialize in your app startup logic
 async function initializeApp() {
-  const client = await init('js-env-YOUR_KEY', {
+  const client = await init('sdk-js-env-YOUR_KEY', {
     id: 'user-123',
     attributes: { tier: 'gold' }
   });
@@ -376,7 +412,7 @@ class MyCustomStorage implements FeatureflowStorage {
   }
 }
 
-const client = createClient('js-env-YOUR_KEY', config, new MyCustomStorage());
+const client = createClient('sdk-js-env-YOUR_KEY', config, new MyCustomStorage());
 ```
 
 ### Event Handling
@@ -421,7 +457,7 @@ If you're migrating from LaunchDarkly, here's a quick comparison:
 | `useFlags()` | `useFeatures()` |
 | `useBoolVariation()` | `useBooleanFlag()` |
 | `useStringVariation()` | `useStringFlag()` |
-| `client.track()` | `client.goal()` |
+| `client.track()` | `client.track()` |
 | `client.identify()` | `client.updateUser()` |
 
 ## Requirements

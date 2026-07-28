@@ -1,7 +1,7 @@
 {
   "name": "@featureflow/react-native-sdk",
-  "version": "1.0.0",
-  "description": "Official Featureflow React Native SDK for feature flags and A/B testing",
+  "version": "2.0.0",
+  "description": "Official Featureflow React Native SDK for feature flags and A/B testing. Pure JavaScript \u2014 no native modules.",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
@@ -53,11 +53,7 @@
     "react": ">=16.8.0",
     "react-native": ">=0.60.0"
   },
-  "dependencies": {
-    "base64-js": "^1.5.1",
-    "featureflow-client": "^2.0.0",
-    "mitt": "^3.0.1"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@react-native-async-storage/async-storage": "^1.21.0",
     "@rollup/plugin-commonjs": "^25.0.7",
@@ -80,4 +76,3 @@
     "typescript": "^5.3.3"
   }
 }
-

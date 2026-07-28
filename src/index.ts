@@ -3,6 +3,10 @@
  *
  * Official React Native SDK for Featureflow feature flags and A/B testing.
  *
+ * The evaluation, event and caching logic lives in `core/`, written against a `Platform`
+ * interface and free of any React Native import. `platform/` is the React Native
+ * implementation of that interface. The split is deliberate — see CLAUDE.md.
+ *
  * @packageDocumentation
  */
 
@@ -10,72 +14,76 @@
 export {
   FeatureflowClientImpl,
   createClient,
-  init
+  init,
+  SDK_VERSION,
+  type Config,
+  type FeatureflowClient
 } from './FeatureflowClient';
 
 // Providers
-export { FeatureflowProvider } from './FeatureflowProvider';
-export { FeatureflowProviderWithClient } from './FeatureflowProviderWithClient';
+export { FeatureflowProvider, type FeatureflowProviderProps } from './FeatureflowProvider';
+export {
+  FeatureflowProviderWithClient,
+  type FeatureflowProviderWithClientProps
+} from './FeatureflowProviderWithClient';
 
 // Context
-export { FeatureflowContext } from './context';
+export { FeatureflowContext, type FeatureflowContextValue } from './context';
 
 // Hooks
 export {
   useFeatureflow,
   useFeatures,
+  useFeature,
   useBooleanFlag,
   useStringFlag,
-  useFeatureflowStatus
+  useJsonValue,
+  useTrack,
+  useFeatureflowStatus,
+  type UseBooleanFlagOptions,
+  type UseBooleanFlagResult,
+  type UseStringFlagResult,
+  type FeatureflowStatus
 } from './hooks';
 
 // Events
-export { events } from './events';
+export { events, type FeatureflowEvent } from './events';
 
-// Storage
-export { ReactNativeStorage, MemoryStorage, getDefaultStorage } from './storage';
+// Platform — exported so tests and previews can substitute storage
+export {
+  createReactNativePlatform,
+  reactNativeStorage,
+  randomId
+} from './platform';
 
-// Evaluate helper
-export { createEvaluate } from './evaluate';
-
-// Types - Core types (some extended for React Native)
+// Core — exported for advanced use and for the shared-core extraction
+export { FeatureflowCore, type FlagsListener } from './core/client';
+export { createMemoryStorage } from './core/memoryStorage';
+export { createEvaluate } from './core/evaluate';
 export type {
-  // Core types from featureflow-client
+  Platform,
+  PlatformRequests,
+  PlatformStorage,
+  PlatformLifecycle,
+  PlatformInfo,
+  FeatureflowResponse
+} from './core/platform';
+export type {
   FeatureflowUser,
   UserAttributes,
+  AttributeValue,
   EvaluatedFeatures,
   Evaluate,
-  Features,
-  Feature,
-  // React Native extended Config (includes cacheTTL, timeout)
-  Config,
-  // Base config from featureflow-client (if needed)
-  BaseConfig,
-} from './types';
+  GoalDetails,
+  Controls,
+  EvaluatedControl,
+  EvalRule,
+  EvalAudience,
+  EvalCondition,
+  CoreConfig,
+  Logger,
+  SdkEvent
+} from './core/types';
 
-// Types defined in React Native SDK
-export type {
-  // Event and rule types
-  EventCallback,
-  Rule,
-  Audience,
-  Condition,
-  Conditions,
-
-  // React Native specific types
-  FeatureflowClient,
-  FeatureflowProviderProps,
-  FeatureflowProviderWithClientProps,
-  FeatureflowContextValue,
-  UseBooleanFlagOptions,
-  UseBooleanFlagResult,
-  UseStringFlagResult,
-  FeatureflowStorage,
-} from './types';
-
-export type { FeatureflowStatus } from './hooks';
-
-// Default export for convenience
 import { init } from './FeatureflowClient';
 export default { init };
-

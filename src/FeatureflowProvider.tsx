@@ -1,134 +1,98 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { FeatureflowContextProvider } from './context';
-import { FeatureflowClientImpl } from './FeatureflowClient';
-import events from './events';
-import type {
-  FeatureflowProviderProps,
-  FeatureflowContextValue,
-  EvaluatedFeatures,
-  FeatureflowClient
-} from './types';
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+
+import { FeatureflowContext, type FeatureflowContextValue } from './context';
+import { FeatureflowClientImpl, type Config } from './FeatureflowClient';
+import type { EvaluatedFeatures, FeatureflowUser } from './core/types';
+
+export interface FeatureflowProviderProps {
+  apiKey: string;
+  user?: FeatureflowUser;
+  config?: Config;
+  /** Rendered until the first evaluation lands. Prevents a visible variant swap on launch. */
+  loadingComponent?: ReactNode;
+  children: ReactNode;
+}
 
 /**
- * FeatureflowProvider component.
+ * Creates a client, starts it, and republishes flag changes to the tree.
  *
- * Provides Featureflow context to child components.
- * Initializes the client on mount and automatically updates features.
- *
- * @example
- * ```tsx
- * import { FeatureflowProvider } from '@featureflow/react-native-sdk';
- *
- * function App() {
- *   return (
- *     <FeatureflowProvider
- *       apiKey="js-env-YOUR_KEY"
- *       user={{ id: 'user-123', attributes: { tier: 'gold' } }}
- *     >
- *       <YourApp />
- *     </FeatureflowProvider>
- *   );
- * }
- * ```
+ * One provider, at the app root. A second creates a second client, which double-counts
+ * impressions and can disagree with the first about a flag.
  */
 export function FeatureflowProvider({
   apiKey,
   user,
   config,
-  children,
-  loadingComponent
+  loadingComponent,
+  children
 }: FeatureflowProviderProps): React.ReactElement {
-  // Create client instance (only once)
-  const [client] = useState<FeatureflowClient>(() => {
-    return new FeatureflowClientImpl(apiKey, config);
-  });
-
-  // State
+  const [client, setClient] = useState<FeatureflowClientImpl | null>(null);
   const [features, setFeatures] = useState<EvaluatedFeatures>({});
-  const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Handle feature updates
-  const handleFeaturesUpdate = useCallback(() => {
-    const newFeatures = client.getFeatures();
-    setFeatures(newFeatures);
-  }, [client]);
+  // The config and user are usually inline literals, so depending on them directly would tear
+  // the client down and rebuild it on every render.
+  const configRef = useRef(config);
+  const userRef = useRef(user);
+  configRef.current = config;
+  userRef.current = user;
 
-  // Initialize client on mount
   useEffect(() => {
-    let isMounted = true;
+    let cancelled = false;
+    const instance = new FeatureflowClientImpl(apiKey, userRef.current, configRef.current);
 
-    const initClient = async () => {
-      try {
-        await client.initialize(user);
+    const unsubscribe = instance.onFlagsChanged((next) => {
+      if (!cancelled) setFeatures(next);
+    });
 
-        if (!isMounted) return;
-
-        setFeatures(client.getFeatures());
-        setIsInitialized(true);
+    instance
+      .start()
+      .then(() => {
+        if (cancelled) return;
+        setClient(instance);
+        setFeatures(instance.getFeatures());
         setIsLoading(false);
-        setError(null);
-      } catch (err) {
-        if (!isMounted) return;
-
+      })
+      .catch((err: unknown) => {
+        // start() is documented never to reject; this is belt and braces so a future change
+        // cannot take the host app down with it.
+        if (cancelled) return;
         setError(err instanceof Error ? err : new Error(String(err)));
+        setClient(instance);
         setIsLoading(false);
-        setIsInitialized(true);
-        // Still set features from cache/defaults
-        setFeatures(client.getFeatures());
-      }
-    };
-
-    // Subscribe to events
-    client.on(events.INIT, handleFeaturesUpdate);
-    client.on(events.LOADED, handleFeaturesUpdate);
-    client.on(events.LOADED_FROM_CACHE, handleFeaturesUpdate);
-
-    initClient();
+      });
 
     return () => {
-      isMounted = false;
-      client.off(events.INIT);
-      client.off(events.LOADED);
-      client.off(events.LOADED_FROM_CACHE);
+      cancelled = true;
+      unsubscribe();
+      void instance.close();
     };
-  }, [client, user, handleFeaturesUpdate]);
+  }, [apiKey]);
 
-  // Update user when it changes
+  // Re-evaluate when the caller passes a different user, without rebuilding the client.
+  const userId = user?.id;
   useEffect(() => {
-    if (isInitialized && user) {
-      client.updateUser(user).then(() => {
-        setFeatures(client.getFeatures());
-      }).catch((err) => {
-        console.warn('[Featureflow] Failed to update user:', err);
-      });
-    }
-  }, [client, user, isInitialized]);
+    if (!client || !user) return;
+    if (client.getUser().id === user.id) return;
+    void client.updateUser(user).then(setFeatures);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, userId]);
 
-  // Context value
-  const contextValue = useMemo<FeatureflowContextValue>(
+  const value = useMemo<FeatureflowContextValue>(
     () => ({
-      features,
       client,
-      isInitialized,
+      features,
       isLoading,
+      isReady: client?.isReady ?? false,
       error
     }),
-    [features, client, isInitialized, isLoading, error]
+    [client, features, isLoading, error]
   );
 
-  // Show loading component if provided and still loading
   if (isLoading && loadingComponent) {
     return <>{loadingComponent}</>;
   }
 
-  return (
-    <FeatureflowContextProvider value={contextValue}>
-      {children}
-    </FeatureflowContextProvider>
-  );
+  return <FeatureflowContext.Provider value={value}>{children}</FeatureflowContext.Provider>;
 }
-
-export default FeatureflowProvider;
-

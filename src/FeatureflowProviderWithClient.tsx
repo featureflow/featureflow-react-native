@@ -1,89 +1,42 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { FeatureflowContextProvider } from './context';
-import events from './events';
-import type {
-  FeatureflowProviderWithClientProps,
-  FeatureflowContextValue,
-  EvaluatedFeatures
-} from './types';
+import React, { useEffect, useMemo, useState, type ReactNode } from 'react';
+
+import { FeatureflowContext, type FeatureflowContextValue } from './context';
+import type { FeatureflowClientImpl } from './FeatureflowClient';
+import type { EvaluatedFeatures } from './core/types';
+
+export interface FeatureflowProviderWithClientProps {
+  client: FeatureflowClientImpl;
+  children: ReactNode;
+}
 
 /**
- * FeatureflowProviderWithClient component.
+ * Publishes from a client you built and started yourself.
  *
- * Provides Featureflow context using a pre-initialized client instance.
- * Use this when you need more control over client initialization.
- *
- * @example
- * ```tsx
- * import { FeatureflowProviderWithClient, init } from '@featureflow/react-native-sdk';
- *
- * // Initialize client first
- * const client = await init('js-env-YOUR_KEY', user);
- *
- * function App() {
- *   return (
- *     <FeatureflowProviderWithClient client={client}>
- *       <YourApp />
- *     </FeatureflowProviderWithClient>
- *   );
- * }
- * ```
+ * Use this when the client is created outside React — in a DI container, or shared with
+ * non-React code. Unlike `FeatureflowProvider`, this does **not** close the client on unmount:
+ * it does not own it.
  */
 export function FeatureflowProviderWithClient({
   client,
   children
 }: FeatureflowProviderWithClientProps): React.ReactElement {
-  // State
-  const [features, setFeatures] = useState<EvaluatedFeatures>(() =>
-    client.getFeatures()
-  );
-  const [isInitialized, setIsInitialized] = useState(() =>
-    client.isInitialized()
-  );
+  const [features, setFeatures] = useState<EvaluatedFeatures>(() => client.getFeatures());
 
-  // Handle feature updates
-  const handleFeaturesUpdate = useCallback(() => {
-    const newFeatures = client.getFeatures();
-    setFeatures(newFeatures);
-    setIsInitialized(client.isInitialized());
+  useEffect(() => {
+    setFeatures(client.getFeatures());
+    return client.onFlagsChanged(setFeatures);
   }, [client]);
 
-  // Subscribe to events
-  useEffect(() => {
-    client.on(events.INIT, handleFeaturesUpdate);
-    client.on(events.LOADED, handleFeaturesUpdate);
-    client.on(events.LOADED_FROM_CACHE, handleFeaturesUpdate);
-    client.on(events.UPDATED, handleFeaturesUpdate);
-
-    // Update state in case client was initialized after mounting
-    handleFeaturesUpdate();
-
-    return () => {
-      client.off(events.INIT);
-      client.off(events.LOADED);
-      client.off(events.LOADED_FROM_CACHE);
-      client.off(events.UPDATED);
-    };
-  }, [client, handleFeaturesUpdate]);
-
-  // Context value
-  const contextValue = useMemo<FeatureflowContextValue>(
+  const value = useMemo<FeatureflowContextValue>(
     () => ({
-      features,
       client,
-      isInitialized,
-      isLoading: !isInitialized,
+      features,
+      isLoading: !client.isReady,
+      isReady: client.isReady,
       error: null
     }),
-    [features, client, isInitialized]
+    [client, features]
   );
 
-  return (
-    <FeatureflowContextProvider value={contextValue}>
-      {children}
-    </FeatureflowContextProvider>
-  );
+  return <FeatureflowContext.Provider value={value}>{children}</FeatureflowContext.Provider>;
 }
-
-export default FeatureflowProviderWithClient;
-

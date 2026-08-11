@@ -44,7 +44,7 @@ import React from 'react';
 import { FeatureflowProvider } from '@featureflow/react-native-sdk';
 import MainApp from './MainApp';
 
-const FF_KEY = 'sdk-sdk-js-env-YOUR_KEY_HERE';
+const FF_KEY = 'sdk-js-env-YOUR_KEY_HERE';
 
 function App() {
   const user = {

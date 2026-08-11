@@ -1,0 +1,54 @@
+name: Publish to npm
+
+# Publishes via npm trusted publishing (OIDC — no token stored). Mirrors the
+# Python/Ruby/.NET SDK flow:
+#   1. bump "version" in package.json
+#   2. publish a GitHub release with the matching tag, e.g. v2.0.1
+#
+# NOTE: npm trusted publishing cannot create a package — the FIRST publish of
+# @featureflow/react-native-sdk must be done by a logged-in user. After that,
+# configure the trusted publisher on npmjs.com (package → Settings →
+# Trusted Publisher): repository featureflow/featureflow-react-native,
+# workflow publish.yml, environment npm.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      # OIDC-based publishing needs npm >= 11.5.1; node 22 ships an older npm.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - name: Check version matches release tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG" ]; then
+            echo "package.json version $VERSION does not match release tag $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+      - run: npm publish --access public

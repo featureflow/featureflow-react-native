@@ -1,6 +1,16 @@
 # Changelog
 
-## [2.0.0] — unreleased
+## [2.1.0] — 2026-08-13
+
+### Added
+
+- **Application tag.** Name the app with the `application` config option and the SDK sends it
+  as `X-Featureflow-Application` on config fetches and event posts, so the dashboard attributes
+  usage and flag evaluations per application. Values are slug-validated (lowercase `a-z0-9._-`,
+  max 64 chars; case is forgiven, anything else is dropped with a warning). The core also tags
+  beacon-style event DTOs for platforms whose unload path cannot set headers.
+
+## [2.0.0] — 2026-08-11
 
 Rewritten. The previous implementation was an independent third copy of the client contract that
 had drifted from `featureflow-javascript-sdk` and the server. This release restructures it into a

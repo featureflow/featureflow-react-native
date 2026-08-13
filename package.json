@@ -1,7 +1,7 @@
 {
   "name": "@featureflow/react-native-sdk",
-  "version": "2.0.0",
-  "description": "Official Featureflow React Native SDK for feature flags and A/B testing. Pure JavaScript \u2014 no native modules.",
+  "version": "2.1.0",
+  "description": "Official Featureflow React Native SDK for feature flags and A/B testing. Pure JavaScript — no native modules.",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",

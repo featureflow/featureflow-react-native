@@ -1,3 +1,4 @@
+import { sanitiseApplication } from './application';
 import { createEvaluate } from './evaluate';
 import { EventsSummary } from './eventsSummary';
 import type { Platform } from './platform';
@@ -48,6 +49,11 @@ export class FeatureflowCore {
     private readonly platform: Platform
   ) {
     this.config = { ...DEFAULT_CORE_CONFIG, ...config };
+    // A config mistake should be visible even without a logger configured — an invalid tag
+    // is a developer error, not runtime diagnostics.
+    this.config.application = sanitiseApplication(this.config.application, (message) =>
+      this.config.logger ? this.config.logger.warn(message) : console.warn(`Featureflow: ${message}`)
+    );
     this.rest = new RestClient(apiKey, this.config, platform);
     this.events = new EventsSummary(this.rest, this.config, () => platform.now());
     this.user = user ?? { id: '' };

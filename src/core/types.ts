@@ -109,6 +109,14 @@ export interface CoreConfig {
   disableEvents: boolean;
   eventFlushIntervalMs: number;
   maxEventQueueSize: number;
+  /**
+   * Optional app label (e.g. 'mobile-app') sent as `X-Featureflow-Application` on every
+   * request, so the Featureflow dashboard can attribute usage and flag evaluations per
+   * application. A slug: lowercase [a-z0-9._-], max 64 chars — case is forgiven, anything
+   * else invalid is dropped with a warning and no header is sent. Write-only telemetry: it
+   * never affects the response, never appears in a URL, and cannot fragment the CDN cache.
+   */
+  application?: string;
   logger?: Logger;
 }
 

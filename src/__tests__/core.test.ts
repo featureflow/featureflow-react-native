@@ -201,17 +201,23 @@ describe('base64UrlEncode', () => {
 function fakePlatform(controls: Controls, overrides: Partial<Platform> = {}): Platform & {
   posted: string[];
   fetches: number;
+  getHeaders: Array<Record<string, string>>;
+  postHeaders: Array<Record<string, string>>;
 } {
   const posted: string[] = [];
+  const getHeaders: Array<Record<string, string>> = [];
+  const postHeaders: Array<Record<string, string>> = [];
   let fetches = 0;
 
   const requests: PlatformRequests = {
-    get: async () => {
+    get: async (_url, headers) => {
       fetches++;
+      getHeaders.push(headers);
       return { status: 200, body: JSON.stringify(controls), header: () => null };
     },
-    post: async (_url, _headers, body) => {
+    post: async (_url, headers, body) => {
       posted.push(body);
+      postHeaders.push(headers);
       return { status: 200, body: '{}', header: () => null };
     }
   };
@@ -231,6 +237,12 @@ function fakePlatform(controls: Controls, overrides: Partial<Platform> = {}): Pl
     },
     get fetches() {
       return fetches;
+    },
+    get getHeaders() {
+      return getHeaders;
+    },
+    get postHeaders() {
+      return postHeaders;
     }
   });
 }
@@ -492,5 +504,117 @@ describe('FeatureflowCore', () => {
     await core.close();
 
     expect(platform.posted).toHaveLength(0);
+  });
+});
+
+// Shared scenarios from featureflow-client-sdk-testbed: the tag is write-only telemetry, sent
+// as X-Featureflow-Application on every request — or not at all.
+describe('application tag', () => {
+  it('sends X-Featureflow-Application on evaluate requests when configured', async () => {
+    const platform = fakePlatform({ x: { rules: [{ variant: 'on' }] } });
+    const core = new FeatureflowCore(
+      'key',
+      { id: 'u' },
+      { application: 'checkout-api', useCache: false },
+      platform
+    );
+    await core.start();
+
+    expect(platform.getHeaders.length).toBeGreaterThan(0);
+    for (const headers of platform.getHeaders) {
+      expect(headers['X-Featureflow-Application']).toBe('checkout-api');
+    }
+    await core.close();
+  });
+
+  it('sends X-Featureflow-Application on event posts', async () => {
+    const platform = fakePlatform({ x: { rules: [{ variant: 'on' }] } });
+    const core = new FeatureflowCore(
+      'key',
+      { id: 'u' },
+      { application: 'checkout-api', useCache: false },
+      platform
+    );
+    await core.start();
+
+    core.evaluate('x');
+    await core.close();
+
+    expect(platform.postHeaders.length).toBeGreaterThan(0);
+    for (const headers of platform.postHeaders) {
+      expect(headers['X-Featureflow-Application']).toBe('checkout-api');
+    }
+  });
+
+  it('forgives case, lowercasing the tag', async () => {
+    const platform = fakePlatform({});
+    const core = new FeatureflowCore(
+      'key',
+      { id: 'u' },
+      { application: 'Checkout-API', useCache: false },
+      platform
+    );
+    await core.start();
+
+    expect(platform.getHeaders[0]['X-Featureflow-Application']).toBe('checkout-api');
+    await core.close();
+  });
+
+  it('drops an invalid tag with a warning and sends no header', async () => {
+    const warn = jest.fn();
+    const platform = fakePlatform({ x: { rules: [{ variant: 'on' }] } });
+    const core = new FeatureflowCore(
+      'key',
+      { id: 'u' },
+      { application: 'checkout api!', useCache: false, logger: { debug: () => undefined, warn } },
+      platform
+    );
+    await core.start();
+    core.evaluate('x');
+    await core.close();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('checkout api!'));
+    for (const headers of platform.getHeaders.concat(platform.postHeaders)) {
+      expect(headers).not.toHaveProperty('X-Featureflow-Application');
+    }
+  });
+
+  it('sends no header when no application is configured', async () => {
+    const platform = fakePlatform({ x: { rules: [{ variant: 'on' }] } });
+    const core = new FeatureflowCore('key', { id: 'u' }, { useCache: false }, platform);
+    await core.start();
+    core.evaluate('x');
+    await core.close();
+
+    for (const headers of platform.getHeaders.concat(platform.postHeaders)) {
+      expect(headers).not.toHaveProperty('X-Featureflow-Application');
+    }
+  });
+
+  // React Native has no sendBeacon, but the core supports platforms that do; a beacon cannot
+  // set headers, so there the tag rides as a field on the event DTOs.
+  it('tags beacon event DTOs, since a beacon cannot set headers', async () => {
+    const beaconed: string[] = [];
+    const platform = fakePlatform({ x: { rules: [{ variant: 'on' }] } });
+    platform.requests.sendBeacon = (_url, body) => {
+      beaconed.push(body);
+      return true;
+    };
+
+    const core = new FeatureflowCore(
+      'key',
+      { id: 'u' },
+      { application: 'checkout-api', useCache: false },
+      platform
+    );
+    await core.start();
+    core.evaluate('x');
+    await core.close();
+
+    expect(beaconed).toHaveLength(1);
+    const batch = JSON.parse(beaconed[0]);
+    for (const event of batch) {
+      expect(event.application).toBe('checkout-api');
+    }
   });
 });

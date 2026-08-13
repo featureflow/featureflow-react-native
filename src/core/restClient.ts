@@ -24,10 +24,19 @@ export class RestClient {
     private readonly platform: Platform
   ) {}
 
+  /**
+   * Standard headers on every request. `X-Featureflow-Application` (when configured — see
+   * `core/application.ts`) is write-only telemetry for per-application usage attribution: it
+   * never affects the response, so it cannot fragment the CDN cache.
+   */
   private get headers(): Record<string, string> {
-    return {
+    const headers: Record<string, string> = {
       'X-Featureflow-Client': `${this.platform.info.name}/${this.platform.info.version}`
     };
+    if (this.config.application) {
+      headers['X-Featureflow-Application'] = this.config.application;
+    }
+    return headers;
   }
 
   async fetchControls(user: FeatureflowUser, keys: string[] = []): Promise<FetchOutcome> {
@@ -71,12 +80,23 @@ export class RestClient {
     return failure ?? { ok: true };
   }
 
-  /** Fire-and-forget path used at teardown, where there may be no time for a round trip. */
+  /**
+   * Fire-and-forget path used at teardown, where there may be no time for a round trip.
+   *
+   * A beacon cannot set headers, so the application tag rides as an `application` field on
+   * the event DTOs instead (the server prefers the header when both are present — see
+   * `featureflow-client-sdk-testbed/CONTRACT.md`). The React Native platform omits
+   * `sendBeacon`, but this core is written for any platform, and the browser has one.
+   */
   sendEventsBeacon(events: SdkEvent[]): boolean {
     const beacon = this.platform.requests.sendBeacon;
     if (!beacon) return false;
+    const application = this.config.application;
+    const payload = application
+      ? events.map((event) => ({ ...event, application }))
+      : events;
     const url = `${trimSlash(this.config.eventsUrl)}/api/js/v1/event/${this.apiKey}`;
-    return beacon.call(this.platform.requests, url, JSON.stringify(events));
+    return beacon.call(this.platform.requests, url, JSON.stringify(payload));
   }
 }
 

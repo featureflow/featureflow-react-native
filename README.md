@@ -292,11 +292,28 @@ await featureflow.updateUser({
 | `requestTimeoutMs` | `10000` | Request timeout. |
 | `storage` | AsyncStorage | Override for tests, or previews without AsyncStorage. |
 | `logger` | none | An SDK should not fill your logs uninvited. |
+| `application` | none | App label sent as `X-Featureflow-Application`; see below. |
 
 Set `defaultFeatures` for any flag whose wrong-way default would be harmful. It is the mobile
 equivalent of the failover variants the server SDKs register — and note the polarity: for a kill
 switch protecting a fragile dependency, the safe default is usually the *safe path*, which may
 mean the flag reads `on` by default.
+
+### Naming your application
+
+Optionally tag this app with an application name so the Featureflow dashboard can attribute
+SDK usage and flag evaluations to it (Admin → SDKs, and the "Evaluated by" panel on each
+feature's statistics tab):
+
+```tsx
+<FeatureflowProvider
+  apiKey="sdk-js-env-YOUR_KEY"
+  config={{ application: 'mobile-app' }}
+>
+```
+
+The name is a slug — lowercase letters, numbers, `.`, `_` and `-`, at most 64 characters.
+Case is forgiven; an otherwise invalid value is dropped with a warning and no tag is sent.
 
 ## Things that are different on mobile
 
